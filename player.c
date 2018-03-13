@@ -1,7 +1,12 @@
 #include <gst/gst.h>
 #include <glib.h>
 #include <stdarg.h>
-
+#define recallMe return TRUE
+/*
+any_event_listener(bus,msg,data)
+called on every signal found on bus
+reacts only on EOS and ERROR by stopping the mainloop
+@return TRUE so to be called again*/
 static gboolean any_event_listener(GstBus *bus,GstMessage *msg,gpointer data){
 	switch (GST_MESSAGE_TYPE(msg)){
 		case GST_MESSAGE_EOS:				//End Of Stream Signal
@@ -17,6 +22,9 @@ static gboolean any_event_listener(GstBus *bus,GstMessage *msg,gpointer data){
 	}
 	return TRUE;						//Signal Handled!
 }
+/*
+on_pad_added_listener(element,pad,data)
+called when the demuxer pad added , to connect dynamically with decoder*/
 static void on_pad_added_listener(GstElement *element,GstPad*pad,gpointer data){
 	GstPad *sink_pad;					//sink pad on decoder reference
 	GstElement *decoder = (GstElement*)data;		//we pass the decoder below in g_signal_connect
@@ -25,6 +33,20 @@ static void on_pad_added_listener(GstElement *element,GstPad*pad,gpointer data){
 	gst_pad_link(pad,sink_pad);				//link to the pad with sink
 	gst_object_unref(sink_pad);				//unreference the sink
 
+}
+/*
+gboolean on_1000_timeout_listener
+called every second , inform the bar(TODO: Add a progressBar) that 1sec is elapsed
+@param pipeline, the main pipeline (top-level bin)*/
+static gboolean on_1000_timeout_listener(GstElement *pipeline){
+	gint64 pos,len;
+	if(gst_element_query_position(pipeline,GST_FORMAT_TIME,&pos)
+		&&gst_element_query_duration(pipeline,GST_FORMAT_TIME,&len)){
+		g_print("Time :%"GST_TIME_FORMAT"/ %"GST_TIME_FORMAT".\r",
+			GST_TIME_ARGS(pos),GST_TIME_ARGS(len));
+	}
+
+	recallMe;
 }
 /*initialize_factories
 @brief  	initializes an arbitary number of factories!
@@ -162,10 +184,13 @@ int main(int argc,char *argv[]){
 	g_print("[INFO]elements connected \n");
 	g_signal_connect(demuxer,"pad-added",G_CALLBACK(on_pad_added_listener),decoder);
 	g_print("[INFO]on_pad_added_listener set to handle messages of type 'pad-added'\n");
+	g_timeout_add(1000,(GSourceFunc)on_1000_timeout_listener,pipeline);
+	g_print("[INFO]on_1000_timeout_listener set to call in 200ms interval");
+
 	gst_element_set_state(pipeline,GST_STATE_PLAYING);
 	g_print("[SUCCESS] pipeline on state PLAYING...\n");
-	g_main_loop_run(main_loop);
 	g_print("[SUCCESS]Rollin..");
+	g_main_loop_run(main_loop);
 
 
 	g_print("Exit! ");
