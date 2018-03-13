@@ -2,6 +2,9 @@
 #include <glib.h>
 #include <stdarg.h>
 #define recallMe return TRUE
+#define SOP_FREE_STRING_AFTER 1
+#define SOP_INITIALIZE_TYPE_FACTORY 2
+#define	SOP_INITIALIZE_TYPE_ELEMENT 4
 /*
 any_event_listener(bus,msg,data)
 called on every signal found on bus
@@ -51,55 +54,45 @@ static gboolean on_1000_timeout_listener(GstElement *pipeline){
 /*initialize_factories
 @brief  	initializes an arbitary number of factories!
 @param int num  the number of pair (GstElementFactory**,gchar *) pairs to initialize*/
-static gboolean initialize_factories(int num,...){
-	GstElementFactory**cursor;
-	gchar * name;
+static gboolean initialize_stuff(int flags,int num,...){
+	GstElementFactory	**cursor;
+	GstElementFactory	*temp_fact;
+        GstElement       	**temp_elem;
+	gchar 			* name;
+	gboolean 		stop=FALSE;
 	va_list args;
 	va_start(args,num);
 	while(num>0){
 		num-=1;
-		cursor=va_arg(args,GstElementFactory**);
-		name=va_arg(args,gchar *);
-		*cursor=gst_element_factory_find(name);
-		if(!(*cursor)){
-			g_print("[INFO] %s factory not found!",name);
-			g_free(name);
-			return FALSE;
+		if(flags&SOP_INITIALIZE_TYPE_FACTORY){
+			cursor=va_arg(args,GstElementFactory**);
+			name=va_arg(args,gchar *);
+			*cursor=gst_element_factory_find(name);
+			if(!(*cursor)){
+				g_print("[INFO] %s factory not found!",name);
+				stop=TRUE;
+				break;
+			}
+			g_print("[INFO] %s factory loaded\n",name);
 		}
-		g_print("[INFO] %s factory loaded\n",name);
-		g_free(name);
-	}
-	return TRUE;
-}
-/*
-initialize_element
-@brief		An elegant way to initialize an arbitary number of elements given the name and the factory
-@int num 	the number of groups of type(GstElementFactory*,GstElement **,gchar*)  */
-static gboolean initialize_elements(int num , ...){
-	GstElementFactory*temp_fact;
-	GstElement       **temp_elem;
-	gchar		 *name;
-	va_list		 args;
-	va_start(args,num);
-	while(num>0){
-		num-=1;
-		temp_fact=(GstElementFactory*)va_arg(args,GstElementFactory*);
-		temp_elem=(GstElement**)va_arg(args,GstElement**);
-		name=(gchar*)va_arg(args,gchar*);
-		*temp_elem=gst_element_factory_create(temp_fact,name);
-		//g_free(name);
-		if(!(*temp_elem)){
-			g_print("[ERR] %s not loaded!\n",name);
-			g_free(name);
-			return FALSE;
-		}
-		else {
-			g_print("[INFO] %s element loaded\n",name);
-		}
-		g_free(name);
-	}
-	return TRUE;
+		else if(flags&SOP_INITIALIZE_TYPE_ELEMENT){
+			temp_fact=(GstElementFactory*)va_arg(args,GstElementFactory*);
+	                temp_elem=(GstElement**)va_arg(args,GstElement**);
+        	        name=(gchar*)va_arg(args,gchar*);
+                	*temp_elem=gst_element_factory_create(temp_fact,name);
+                	if(!(*temp_elem)){
+                        	g_print("[ERR] %s not loaded!\n",name);
+				stop=TRUE;
+				break;
+                	}
+                        g_print("[INFO] %s element loaded\n",name);
 
+		}
+		if(flags&SOP_FREE_STRING_AFTER) g_free(name);
+		if(stop)return FALSE;
+
+	}
+	return TRUE;
 }
 int main(int argc,char *argv[]){
 
@@ -141,7 +134,7 @@ int main(int argc,char *argv[]){
 		return -1;
 	}
 
-	if(!(initialize_factories(5,
+	if(!(initialize_stuff((SOP_FREE_STRING_AFTER| SOP_INITIALIZE_TYPE_FACTORY),5,
 				&source_factory   ,g_strdup("filesrc"),
 				&demuxer_factory  ,g_strdup("oggdemux"),
 				&decoder_factory  ,g_strdup("vorbisdec"),
@@ -150,7 +143,7 @@ int main(int argc,char *argv[]){
 			g_print("[ERR]One or more factories not found ,terminate.\n");
 			return -1;
 	}
-	if(!(initialize_elements(5,
+	if(!(initialize_stuff((SOP_FREE_STRING_AFTER|SOP_INITIALIZE_TYPE_ELEMENT),5,
 				source_factory,	 &source   ,g_strdup("file-source"),
 				demuxer_factory	 ,&demuxer ,g_strdup("ogg-demuxer"),
 				decoder_factory	 ,&decoder ,g_strdup("vorbis-decoder"),
